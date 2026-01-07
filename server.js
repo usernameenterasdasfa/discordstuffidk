@@ -9,7 +9,6 @@ app.use(cors());
 app.use(express.json());
 
 // 2. CONFIGURATION: Get the Webhook URL from the server's settings
-// On Render, you set this in the "Environment Variables" section.
 const DISCORD_WEBHOOK_URL = process.env.DISCORD_WEBHOOK_URL;
 
 // 3. THE ROUTE: Your game will send data here
@@ -20,23 +19,30 @@ app.post('/send-score', async (req, res) => {
         return res.status(500).json({ error: "Server misconfiguration" });
     }
 
-    const { pilotName, score } = req.body;
+    // Now accepting 'difficulty' and 'color' from the game
+    const { pilotName, score, difficulty, color } = req.body;
 
     // Basic validation
     if (!pilotName || !score) {
         return res.status(400).json({ error: "Missing pilotName or score" });
     }
 
+    // Default to 'Normal' (Yellow) if no color is sent
+    const embedColor = color || 16766720; 
+    const diffText = difficulty || "NORMAL";
+
     // 4. FORMATTING: Create the message for Discord
     const discordPayload = {
         username: "Space Shooter Command",
         embeds: [{
             title: "🚀 Mission Report",
-            color: 3066993, // Sci-Fi Cyan color
+            color: embedColor, // Uses the color sent from the game
             fields: [
                 { name: "Pilot Callsign", value: pilotName, inline: true },
-                { name: "Score", value: score.toString(), inline: true }
+                { name: "Score", value: score.toString(), inline: true },
+                { name: "Difficulty", value: diffText, inline: true }
             ],
+            footer: { text: "Verified by High Command" },
             timestamp: new Date().toISOString()
         }]
     };
