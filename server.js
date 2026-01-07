@@ -1,100 +1,68 @@
 const express = require('express');
-const cors = require('cors');
 const fetch = require('node-fetch');
+const cors = require('cors');
 
 const app = express();
-const PORT = process.env.PORT || 3000;
 
-// --- CONFIGURATION ---
-// PASTE YOUR DISCORD WEBHOOK URL HERE
-// In production, it is safer to use process.env.DISCORD_WEBHOOK_URL
-const DISCORD_WEBHOOK_URL = 'https://discord.com/api/webhooks/1458461417870069854/UkW4qUX8_IxjHyT5uVYq5Caeu0QObOjHKRa__CZm7x2z3IkTcPyj3UuBSeXoEFcT4TL8';
-
-// --- MIDDLEWARE ---
-// Enable CORS to allow your game (hosted on a different domain) to talk to this server
-app.use(cors());
-
-// Parse JSON bodies (as sent by API clients)
+// 1. SECURITY: Allow your game to talk to this server
+app.use(cors()); 
 app.use(express.json());
 
-// --- ROUTES ---function sendMissionReport(score) {
-    const webhookURL = "https://discord.com/api/webhooks/1458461417870069854/UkW4qUX8_IxjHyT5uVYq5Caeu0QObOjHKRa__CZm7x2z3IkTcPyj3UuBSeXoEFcT4TL8";
-    
-    const payload = {
-        content: `**Mission Report:** Pilot scored ${score} points!`,
-        username: "Space Shooter Arcade"
+// 2. CONFIGURATION: Get the Webhook URL from the server's settings
+// On Render, you set this in the "Environment Variables" section.
+const DISCORD_WEBHOOK_URL = process.env.DISCORD_WEBHOOK_URL;
+
+// 3. THE ROUTE: Your game will send data here
+app.post('/send-score', async (req, res) => {
+    // Check if the server is set up correctly
+    if (!DISCORD_WEBHOOK_URL) {
+        console.error("Error: DISCORD_WEBHOOK_URL is missing in environment variables.");
+        return res.status(500).json({ error: "Server misconfiguration" });
+    }
+
+    const { pilotName, score } = req.body;
+
+    // Basic validation
+    if (!pilotName || !score) {
+        return res.status(400).json({ error: "Missing pilotName or score" });
+    }
+
+    // 4. FORMATTING: Create the message for Discord
+    const discordPayload = {
+        username: "Space Shooter Command",
+        embeds: [{
+            title: "🚀 Mission Report",
+            color: 3066993, // Sci-Fi Cyan color
+            fields: [
+                { name: "Pilot Callsign", value: pilotName, inline: true },
+                { name: "Score", value: score.toString(), inline: true }
+            ],
+            timestamp: new Date().toISOString()
+        }]
     };
 
-    fetch(webhookURL, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload)
-    })
-    .then(response => {
-        if (!response.ok) console.error("Discord rejected the transmission:", response.status);
-        else console.log("Mission report uploaded to Discord.");
-    })
-    .catch(error => {
-        console.error("CORS BLOCK DETECTED: Browsers cannot send directly to Discord.", error);
-    });
-}
-
-// usage:
-sendMissionReport(1000);
-
-// Health check endpoint to confirm server is running
-app.get('/', (req, res) => {
-    res.send('Space Shooter Proxy is running!');
-});
-
-/**
- * POST /api/message
- * Expects a JSON body: { "content": "Your message here" }
- */
-app.post('/api/message', async (req, res) => {
-    const { content } = req.body;
-
-    // 1. Validation
-    if (!content) {
-        return res.status(400).json({ error: 'Message content is required' });
-    }
-
-    if (!DISCORD_WEBHOOK_URL || DISCORD_WEBHOOK_URL === 'YOUR_DISCORD_WEBHOOK_URL_HERE') {
-        console.error('Webhook URL is not configured.');
-        return res.status(500).json({ error: 'Server configuration error' });
-    }
-
     try {
-        // 2. Construct the Discord Payload
-        // You can customize this to use Embeds for prettier messages
-        const discordPayload = {
-            content: `🚀 **Space Shooter Update:** ${content}`
-        };
-
-        // 3. Send to Discord
+        // 5. FORWARDING: Send the data to Discord
         const discordResponse = await fetch(DISCORD_WEBHOOK_URL, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(discordPayload)
         });
 
-        // 4. Handle Discord's Response
         if (discordResponse.ok) {
-            return res.status(200).json({ success: true, message: 'Message sent to Discord' });
+            res.json({ success: true, message: "Score sent to Discord!" });
         } else {
-            // Log the actual error from Discord for debugging
-            const errorText = await discordResponse.text();
-            console.error('Discord API Error:', errorText);
-            return res.status(discordResponse.status).json({ error: 'Failed to send message to Discord' });
+            console.error("Discord rejected the message:", discordResponse.statusText);
+            res.status(500).json({ error: "Discord rejected transmission" });
         }
-
     } catch (error) {
-        console.error('Server Error:', error);
-        return res.status(500).json({ error: 'Internal Server Error' });
+        console.error("Internal Server Error:", error);
+        res.status(500).json({ error: "Internal Relay Failure" });
     }
 });
 
-// --- START SERVER ---
+// Start the server
+const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-    console.log(`Server is listening on port ${PORT}`);
+    console.log(`Proxy Relay Online on port ${PORT}`);
 });
